@@ -15,6 +15,7 @@
 #ifndef LLVM_CLANG_LIB_SEMA_SEMALIFETIMESAFETY_H
 #define LLVM_CLANG_LIB_SEMA_SEMALIFETIMESAFETY_H
 
+#include "clang/AST/IgnoreExpr.h"
 #include "clang/Analysis/Analyses/LifetimeSafety/LifetimeAnnotations.h"
 #include "clang/Analysis/Analyses/LifetimeSafety/LifetimeSafety.h"
 #include "clang/Basic/DiagnosticSema.h"
@@ -760,8 +761,17 @@ private:
     return Res;
   }
 
+  // Parentheses share origins with their sub-expression (see
+  // OriginManager::getOrCreateList). Unlike IgnoreParenImpCasts(), this keeps
+  // MaterializeTemporaryExpr, which is needed to describe the subject as a
+  // temporary object.
+  static const Expr *ignoreParensAndImpCasts(const Expr *E) {
+    return IgnoreExprNodes(E, IgnoreParensSingleStep,
+                           IgnoreImplicitCastsSingleStep);
+  }
+
   std::string getDiagSubjectDescription(const Expr *E) {
-    E = E->IgnoreImpCasts();
+    E = ignoreParensAndImpCasts(E);
     if (const auto *DAE = dyn_cast<CXXDefaultArgExpr>(E))
       return getDiagSubjectDescription(DAE->getExpr()->IgnoreParenBaseCasts());
     if (isa<MaterializeTemporaryExpr>(E))
@@ -792,8 +802,8 @@ private:
   }
 
   bool shouldShowInAliasChain(const Expr *CurrExpr, const Expr *LastExpr) {
-    CurrExpr = CurrExpr->IgnoreImpCasts();
-    LastExpr = LastExpr->IgnoreImpCasts();
+    CurrExpr = ignoreParensAndImpCasts(CurrExpr);
+    LastExpr = ignoreParensAndImpCasts(LastExpr);
 
     if (!isa<CallExpr, DeclRefExpr>(CurrExpr))
       return false;
